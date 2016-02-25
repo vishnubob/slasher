@@ -8,14 +8,15 @@ class Slasher(SCAD_Object):
     depth = 85.48
     height = 20
     corner_radius = 3.18
-    plate_height = 0.76
     flange_types = ["short", "medium", "tall"]
     flange_heights = {
         "short": 2.41,
         "medium": 6.10,
-        "tall": 7.62
+        "tall": 7.62,
+        "none": 0,
+        None: 0,
     }
-    flange_width = 1.27
+    _flange_width = 1.27
     flange_type = "short"
     well_dia = 20
     well_height_offset = 1
@@ -25,8 +26,8 @@ class Slasher(SCAD_Object):
         return self.flange_heights[self.flange_type]
 
     @property
-    def flange(self):
-        return RoundedCube(x=self.width, y=self.depth, z=self.flange_height, r=self.corner_radius, fn=200)
+    def flange_width(self):
+        return self._flange_width if self.flange_height != 0 else 0
 
     @property
     def plate_width(self):
@@ -37,13 +38,24 @@ class Slasher(SCAD_Object):
         return self.depth - (self.flange_width * 2)
 
     @property
+    def plate_height(self):
+        return self.height - self.flange_height
+
+    @property
+    def base(self):
+        if self.flange_height:
+            flange = RoundedCube(x=self.width, y=self.depth, z=self.flange_height, r=self.corner_radius, fn=200)
+            top = Cube(x=self.plate_width, y=self.plate_depth, z=self.plate_height, r=self.corner_radius, center=True)
+            z_offset = (self.plate_height / 2.0) + self.flange_height
+            top = Translate(z=z_offset)(top)
+            base = Union()(flange, top)
+        else:
+            base = RoundedCube(x=self.width, y=self.depth, z=self.height, r=self.corner_radius, fn=200)
+        return base
+
+    @property
     def plate(self):
-        plate = Cube(x=self.plate_width, y=self.plate_depth, z=self.height, r=self.corner_radius, center=True)
-        z_offset = (self.height / 2.0) + self.flange_height
-        plate = Translate(z=z_offset)(plate)
-        plate = Union()(plate, self.flange)
-        plate = Difference()(plate, self.wells)
-        return plate
+        return Difference()(self.base, self.wells)
 
     @property
     def well_positions(self):
@@ -61,10 +73,10 @@ class Slasher(SCAD_Object):
 
     @property
     def wells(self):
-        well = Cylinder(dia=self.well_dia, h=self.height)
+        well = Cylinder(dia=self.well_dia, h=self.height, fn=200)
         wells = [Translate(**pos)(well) for pos in self.well_positions]
         wells = Union()(*wells)
-        z_offset = self.well_height_offset + self.height / 2.0
+        z_offset = self.well_height_offset
         wells = Translate(z=z_offset)(wells)
         return wells
 
@@ -72,9 +84,20 @@ class Slasher(SCAD_Object):
         return self.plate
 
 class VialPlate(Slasher):
-    well_dia = 22.5
+    well_dia = 22.8
+    flange_type = "none"
+    well_height_offset = 2
+    height = 22
+
+class VialPlateTest(Slasher):
+    well_dia = 23
+    height = 21
+    flange_type = "none"
+    width = well_dia + 5
+    depth = well_dia + 5
 
 plate = VialPlate()
+#plate = VialPlateTest()
 plate.render("vial_plate.scad")
 if not os.path.exists("vial_plate.stl"):
     plate.render("vial_plate.stl")
